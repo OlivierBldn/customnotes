@@ -1,22 +1,44 @@
 <!doctype html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri Notes App</title>
+    <title>Custom Notes App</title>
     <script type="module" src="/main.js" defer></script>
-  </head>
+</head>
 
-  <body>
-    <div class="container">
-      <h1>TP Tauri Etape 5</h1>
+<body>
+    <section class="container">
+        <header class="header">
+            <h1>Custom Notes</h1>
+        </header>
+        <main class="note-main">
+            <h3 id="selected-note-id"></h3>
+            <form id="note-form">
+                <input type="hidden" id="note-id">
+                <input type="text" id="note-title" placeholder="Title" class="note-input">
+                <textarea id="note-content" placeholder="Content" class="note-textarea"></textarea>
+                <div class="button-group">
+                    <button type="button" id="cancel-button" class="btn btn-danger">Cancel</button>
+                    <button type="button" id="create-note" class="btn btn-primary">Create Note</button>
+                </div>
+            </form>
+            <table id="notes-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Title</th>
+                        <th>Content</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="notes-table-body">
+                </tbody>
+            </table>
+        </main>
+    </section>
+</body>
 
-      <form id="noteForm">
-        <label for="note">Note:</label><br>
-        <textarea id="note" name="note" rows="4" cols="50"></textarea><br>
-        <input type="submit" value="Save Note">
-      </form>
-    </div>
-  </body>
 </html>

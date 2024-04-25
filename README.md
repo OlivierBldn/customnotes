@@ -22,9 +22,6 @@ This template is developped using Tauri in vanilla HTML, CSS and Javascript.
 ```bash
     cd customnotes
 ```
-```bash
-    node app
-```
 ### 3 - Check the requirements :
 ```bash
     rustc --version
