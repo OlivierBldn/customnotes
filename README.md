@@ -42,19 +42,31 @@ Tauri : https://tauri.app/fr/v1/guides/getting-started/prerequisites
     npm install
 ```
 ### 6 - Launch the project :
-- Under development mode using cargo 
+#### Under development mode using cargo
+- Place yourself in the custom_notes folder and run :
 ```bash
     cargo tauri dev
 ```
-- Under development mode using npm :
+#### Under development mode using npm :
+- Place yourself in the custom_notes folder and run :
 ```bash
     npm run tauri dev
 ```
-- Under production mode using cargo :
+#### Under production mode using cargo :
+- Place yourself in the custom_notes folder and run :
 ```bash
     cargo tauri build
 ```
-- Under production mode using npm :
+- Then place yourself in the src-tauri/target/release folder and run :
+```bash
+    ./custom-notes
+```
+#### Under production mode using npm :
+- Place yourself in the custom_notes folder and run :
 ```bash
     npm run tauri build
+```
+- Then place yourself in the src-tauri/target/release folder and run :
+```bash
+    ./custom-notes
 ```
