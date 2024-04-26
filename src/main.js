@@ -8,8 +8,10 @@ window.addEventListener("DOMContentLoaded", () => {
   const notesTableBody = document.querySelector("#notes-table-body");
   const cancelButton = document.querySelector("#cancel-button");
   const selectedNoteId = document.querySelector("#selected-note-id");
+  const saveButton = document.querySelector("#save-note");
 
   createNoteButton.addEventListener("click", createNote);
+  saveButton.addEventListener("click", saveNote);
 
   // Clear the input fields when the cancel button is clicked
   cancelButton.addEventListener("click", () => {
@@ -156,9 +158,33 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  /**
+   * Saves the displayed note in a s3 bucket
+   *
+   * @async
+   * @function saveNote
+   * @returns {Promise<void>} A promise that resolves when the note is saved successfully.
+   * @throws {Error} If an error occurs while saving the note.
+   */
+  async function saveNote() {
+    try {
+      if (noteId.value) {
+        const result = await invoke('save_note', {
+          title: noteTitle.value,
+          content: noteContent.value
+        });
+        console.log(result);
+      } else {
+        await createNote();
+      }
+    } catch (error) {
+      console.error("Error saving note:", error);
+      alert("An error occurred while trying to save the note.");
+    }
+  }
+
   // Makes the methods globally available in the window element.
   window.showNote = showNote;
-  window.createNote = createNote;
   window.updateNote = updateNote;
   window.deleteNote = deleteNote;
 

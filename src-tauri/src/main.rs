@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection, Result};
 use lazy_static::lazy_static;
 
+use aws_sdk_s3 as s3;
+use s3::types::CreateBucketConfiguration;
 
 lazy_static! {
 /// Establishes a connection to a SQLite database and creates a table for notes if it doesn't exist.
@@ -119,6 +121,108 @@ fn delete_note(id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// Creates a new Amazon S3 bucket.
+///
+/// # Operation
+///
+/// * A connection to the Amazon S3 service is established using the AWS SDK for Rust.
+/// * The region for the S3 service is set to "eu-west-3".
+/// * A new S3 bucket named "olivier-rust-custom-notes" is created in the "eu-west-3" region.
+///
+/// # Returns
+///
+/// * If the operation is successful, a `Result` containing a `String` with the message "Bucket created successfully" is returned.
+/// * If the operation fails, a `Result` containing an `Err` with a `String` describing the error is returned.
+///
+/// # Errors
+///
+/// This function will return an error if the AWS SDK encounters an error when creating the bucket.
+#[tauri::command]
+async fn create_bucket() -> Result<String, String> {
+    let myconfig = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("eu-west-3"))
+        .load()
+        .await;
+    let s3_client = s3::Client::new(&myconfig);
+    let constraint = s3::types::BucketLocationConstraint::from("eu-west-3");
+    let bucket_config = CreateBucketConfiguration::builder().location_constraint(constraint).build();
+    let bucket_creation = s3_client.create_bucket()
+        .create_bucket_configuration(bucket_config)
+        .bucket("olivier-rust-custom-notes")
+        .send().await;
+    match bucket_creation {
+        Ok(_) => {
+            let head_bucket_output = s3_client.head_bucket().bucket("olivier-rust-custom-notes").send().await;
+            match head_bucket_output {
+                Ok(_) => {
+                    println!("Bucket created successfully");
+                    Ok("Bucket created successfully".to_string())
+                },
+                Err(e) => {
+                    println!("Bucket creation seemed successful, but the bucket does not exist: {:?}", e);
+                    Err(format!("Bucket creation seemed successful, but the bucket does not exist: {:?}", e))
+                },
+            }
+        },
+        Err(e) => {
+            println!("Bucket creation failed: {:?}", e);
+            Err(format!("Bucket creation failed: {:?}", e))
+        },
+    }
+}
+
+/// Saves a note to an Amazon S3 bucket.
+///
+/// # Parameters
+///
+/// * `title`: The title of the note. This is used as the base name of the file in the S3 bucket.
+/// * `content`: The content of the note. This is the text that will be saved in the file.
+///
+/// # Operation
+///
+/// * A connection to the Amazon S3 service is established using the AWS SDK for Rust.
+/// * The region for the S3 service is set to "eu-west-3".
+/// * The content of the note is converted to bytes and then to a ByteStream.
+/// * The title of the note is used as the base name of the file, with ".txt" appended to it.
+/// * The file is uploaded to the S3 bucket named "olivier-rust-custom-notes".
+/// * The content type of the file is set to "text/plain".
+///
+/// # Returns
+///
+/// * If the operation is successful, a `Result` containing a `String` with the message "Object uploaded successfully" is returned.
+/// * If the operation fails, a `Result` containing an `Err` with a `String` describing the error is returned.
+///
+/// # Errors
+///
+/// This function will return an error if the AWS SDK encounters an error when uploading the file to the S3 bucket.
+#[tauri::command]
+async fn save_note(title: String, content: String) -> Result<String, String> {
+    let myconfig = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("eu-west-3"))
+        .load()
+        .await;
+    let s3_client = s3::Client::new(&myconfig);
+    let input_string = content.as_bytes().to_vec();
+    let bytestream = s3::primitives::ByteStream::from(input_string);
+    let filename = format!("{}.txt", title);
+    let put_object = s3_client.put_object()
+        .bucket("olivier-rust-custom-notes")
+        .key(&filename)
+        .body(bytestream)
+        .content_type("text/plain")
+        .send().await;
+
+    match put_object {
+        Ok(_) => {
+            println!("Object uploaded successfully");
+            Ok("Object uploaded successfully".to_string())
+        },
+        Err(e) => {
+            println!("Object upload failed: {:?}", e);
+            Err(format!("Object upload failed: {:?}", e))
+        },
+    }
+}
 
 /// The main entry point of the application.
 /// 
@@ -126,9 +230,13 @@ fn delete_note(id: i64) -> Result<(), String> {
 /// It registers the command handlers for creating, reading, updating, and deleting notes.
 /// 
 /// Executes the Tauri application and runs the event loop.
-fn main() {
+#[tokio::main]
+async fn main() {
+
+    create_bucket().await.unwrap();
+
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![create_note, read_notes, update_note, delete_note])
+        .invoke_handler(tauri::generate_handler![create_note, read_notes, update_note, delete_note, save_note])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
