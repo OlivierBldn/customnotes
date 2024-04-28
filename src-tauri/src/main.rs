@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 
 use aws_sdk_s3 as s3;
 use s3::types::CreateBucketConfiguration;
+use s3::types::BucketLocationConstraint;
 
 lazy_static! {
 /// Establishes a connection to a SQLite database and creates a table for notes if it doesn't exist.
@@ -40,22 +41,29 @@ lazy_static! {
     };
 }
 
+/// Represents a note with an ID, title, and content.
+#[derive(Debug, serde::Deserialize, Clone)]
+pub struct Note {
+    id: Option<i64>,
+    title: String,
+    content: String,
+}
+
 /// Creates a new note with the given title and content.
 /// 
 /// # Arguments
 /// 
-/// * `title` - The title of the note.
-/// * `content` - The content of the note.
+/// * `note` - The note to create. It should contain the title and content of the note.
 /// 
 /// # Returns
 /// 
 /// Returns `Ok(())` if the note is created successfully, or `Err(String)` if an error occurs.
 #[tauri::command]
-fn create_note(title: String, content: String) -> Result<(), String> {
+fn create_note(note: Note) -> Result<(), String> {
     let conn = CONNECTION.lock().unwrap();
     conn.execute(
         "INSERT INTO notes (title, content) VALUES (?1, ?2)",
-        params![title, content],
+        params![note.title, note.content],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -85,19 +93,17 @@ fn read_notes() -> Result<Vec<(i64, String, String)>, String> {
 /// 
 /// # Arguments
 /// 
-/// * `id` - The ID of the note to update.
-/// * `title` - The new title of the note.
-/// * `content` - The new content of the note.
+/// * `note` - The note to update. It should contain the ID, title, and content of the note.
 /// 
 /// # Returns
 /// 
 /// Returns `Ok(())` if the note is updated successfully, or `Err(String)` if an error occurs.
 #[tauri::command]
-fn update_note(id: i64, title: String, content: String) -> Result<(), String> {
+fn update_note(note: Note) -> Result<(), String> {
     let conn = CONNECTION.lock().unwrap();
     conn.execute(
         "UPDATE notes SET title = ?1, content = ?2 WHERE id = ?3",
-        params![title, content, id],
+        params![note.title, note.content, note.id],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -121,62 +127,95 @@ fn delete_note(id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// Checks if an Amazon S3 bucket exists.
+///
+/// # Parameters
+///
+/// * `client` - A reference to the AWS S3 client.
+/// * `bucket_name` - The name of the bucket to check.
+///
+/// # Returns
+///
+/// Returns a `Result` containing a boolean value:
+/// * `Ok(true)` if the bucket exists.
+/// * `Ok(false)` if the bucket does not exist.
+/// * `Err(s3::Error)` if an error occurs while checking the bucket existence.
+///
+/// # Errors
+///
+/// This function will return an error if the AWS SDK encounters an error when checking the bucket existence.
+async fn bucket_exists(client: &s3::Client, bucket_name: &str) -> Result<bool, s3::Error> {
+    match client.head_bucket().bucket(bucket_name).send().await {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}
+
 /// Creates a new Amazon S3 bucket.
+///
+/// # Parameters
+///
+/// * `s3_client` - A reference to the AWS S3 client.
+/// * `bucket_name` - The name of the bucket to create.
 ///
 /// # Operation
 ///
 /// * A connection to the Amazon S3 service is established using the AWS SDK for Rust.
 /// * The region for the S3 service is set to "eu-west-3".
-/// * A new S3 bucket named "olivier-rust-custom-notes" is created in the "eu-west-3" region.
+/// * A new S3 bucket with the specified `bucket_name` is created in the "eu-west-3" region.
 ///
 /// # Returns
 ///
-/// * If the operation is successful, a `Result` containing a `String` with the message "Bucket created successfully" is returned.
-/// * If the operation fails, a `Result` containing an `Err` with a `String` describing the error is returned.
+/// * If the operation is successful, `Ok(())` is returned.
+/// * If the operation fails, `Err(s3::Error)` is returned.
 ///
 /// # Errors
 ///
 /// This function will return an error if the AWS SDK encounters an error when creating the bucket.
 #[tauri::command]
-async fn create_bucket() -> Result<String, String> {
-    let myconfig = aws_config::defaults(aws_config::BehaviorVersion::latest())
-        .region(aws_config::Region::new("eu-west-3"))
-        .load()
-        .await;
-    let s3_client = s3::Client::new(&myconfig);
-    let constraint = s3::types::BucketLocationConstraint::from("eu-west-3");
-    let bucket_config = CreateBucketConfiguration::builder().location_constraint(constraint).build();
-    let bucket_creation = s3_client.create_bucket()
+async fn create_bucket(s3_client: &s3::Client, bucket_name: &str) -> Result<(), s3::Error> {
+    let region_string = s3_client.config().region().unwrap().as_ref().to_string();
+    let constraint = BucketLocationConstraint::try_parse(&region_string)
+        .unwrap_or_else(|_| panic!("Invalid region: {}", region_string));
+    let bucket_config = CreateBucketConfiguration::builder()
+        .location_constraint(constraint)
+        .build();
+
+    s3_client.create_bucket()
         .create_bucket_configuration(bucket_config)
-        .bucket("olivier-rust-custom-notes")
-        .send().await;
-    match bucket_creation {
-        Ok(_) => {
-            let head_bucket_output = s3_client.head_bucket().bucket("olivier-rust-custom-notes").send().await;
-            match head_bucket_output {
-                Ok(_) => {
-                    println!("Bucket created successfully");
-                    Ok("Bucket created successfully".to_string())
-                },
-                Err(e) => {
-                    println!("Bucket creation seemed successful, but the bucket does not exist: {:?}", e);
-                    Err(format!("Bucket creation seemed successful, but the bucket does not exist: {:?}", e))
-                },
-            }
-        },
-        Err(e) => {
-            println!("Bucket creation failed: {:?}", e);
-            Err(format!("Bucket creation failed: {:?}", e))
-        },
+        .bucket(bucket_name)
+        .send()
+        .await?;
+
+    Ok(())
+}
+
+/// * `note` - The note to validate. It should contain the title and content of the note.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the parameters are valid, or `Err(String)` if an error occurs.
+///
+/// # Errors
+///
+/// This function will return an error if the title is too long (more than 100 characters) or if the content is too long (more than 1,000,000 characters).
+fn validate_params(note: Note) -> Result<(), String> {
+    if note.title.len() > 100 {
+        return Err("Title too long".to_string());
     }
+
+    if note.content.len() > 1000000 {
+        return Err("Content too long".to_string());
+    }
+
+    Ok(())
 }
 
 /// Saves a note to an Amazon S3 bucket.
 ///
 /// # Parameters
 ///
-/// * `title`: The title of the note. This is used as the base name of the file in the S3 bucket.
-/// * `content`: The content of the note. This is the text that will be saved in the file.
+/// * `note` - The note to save. It should contain the title and content of the note.
 ///
 /// # Operation
 ///
@@ -196,15 +235,25 @@ async fn create_bucket() -> Result<String, String> {
 ///
 /// This function will return an error if the AWS SDK encounters an error when uploading the file to the S3 bucket.
 #[tauri::command]
-async fn save_note(title: String, content: String) -> Result<String, String> {
+async fn save_note(note: Note) -> Result<String, String> {
+
+    match validate_params(note.clone()) {
+        Ok(_) => {
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
+
     let myconfig = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new("eu-west-3"))
         .load()
         .await;
     let s3_client = s3::Client::new(&myconfig);
-    let input_string = content.as_bytes().to_vec();
+    let input_string = note.content.as_bytes().to_vec();
     let bytestream = s3::primitives::ByteStream::from(input_string);
-    let filename = format!("{}.txt", title);
+    let filename = format!("{}.txt", note.title);
     let put_object = s3_client.put_object()
         .bucket("olivier-rust-custom-notes")
         .key(&filename)
@@ -224,6 +273,51 @@ async fn save_note(title: String, content: String) -> Result<String, String> {
     }
 }
 
+/// Creates a new `Note` object with the provided values.
+///
+/// # Arguments
+///
+/// * `note.0` - The ID of the note.
+/// * `note.1` - The title of the note.
+/// * `note.2` - The content of the note.
+///
+/// # Returns
+///
+/// A new `Note` object with the provided values.
+#[tauri::command]
+async fn send_notes_to_cloud() -> Result<(), String> {
+    let notes = read_notes().unwrap();
+
+    // Create a vector to store any errors that occur during the sending process (allows process to continue for others)
+    let mut errors = Vec::new();
+
+    for note in notes {
+        let note = Note {
+            id: Some(note.0),
+            title: note.1,
+            content: note.2,
+        };
+        match validate_params(note.clone()) {
+            Ok(_) => {
+                if let Err(e) = save_note(note).await {
+                    println!("Failed to save note: {}", e);
+                    errors.push(e);
+                }
+            },
+            Err(e) => {
+                println!("Note validation failed for note with id {}: {}", note.id.unwrap(), e);
+                errors.push(format!("Note validation failed for note with id {}: {}", note.id.unwrap(), e));
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors.join(", "));
+    }
+
+    Ok(())
+}
+
 /// The main entry point of the application.
 /// 
 /// This function initializes the Tauri application and sets up the necessary database connection.
@@ -233,10 +327,39 @@ async fn save_note(title: String, content: String) -> Result<String, String> {
 #[tokio::main]
 async fn main() {
 
-    create_bucket().await.unwrap();
+    let myconfig = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("eu-west-3"))
+        .load()
+        .await;
+    let s3_client = s3::Client::new(&myconfig);
+    let bucket_name = "olivier-rust-custom-notes";
+
+    match bucket_exists(&s3_client, bucket_name).await {
+        Ok(bucket_exists) => {
+            if !bucket_exists {
+                match create_bucket(&s3_client, bucket_name).await {
+                    Ok(_) => {
+                    },
+                    Err(e) => {
+                        println!("Failed to create bucket: {}", e);
+                    }
+                }
+            }
+        },
+        Err(e) => {
+            println!("Failed to check if bucket exists: {}", e);
+        }
+    }
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![create_note, read_notes, update_note, delete_note, save_note])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    .invoke_handler(tauri::generate_handler![
+        create_note, 
+        read_notes, 
+        update_note, 
+        delete_note, 
+        save_note, 
+        send_notes_to_cloud
+    ])
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
 }

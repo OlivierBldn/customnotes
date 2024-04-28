@@ -8,10 +8,12 @@ window.addEventListener("DOMContentLoaded", () => {
   const notesTableBody = document.querySelector("#notes-table-body");
   const cancelButton = document.querySelector("#cancel-button");
   const selectedNoteId = document.querySelector("#selected-note-id");
-  const saveButton = document.querySelector("#save-note");
+  // const saveButton = document.querySelector("#save-note");
+  const sendNotesToCloudButton = document.querySelector("#send-notes-to-cloud");
 
   createNoteButton.addEventListener("click", createNote);
-  saveButton.addEventListener("click", saveNote);
+  // saveButton.addEventListener("click", saveNote);
+  sendNotesToCloudButton.addEventListener("click", sendNotesToCloud);
 
   // Clear the input fields when the cancel button is clicked
   cancelButton.addEventListener("click", () => {
@@ -32,8 +34,10 @@ window.addEventListener("DOMContentLoaded", () => {
   async function createNote() {
     try {
       await invoke("create_note", {
-        title: noteTitle.value,
-        content: noteContent.value,
+        note: {
+          title: noteTitle.value,
+          content: noteContent.value,
+        },
       });
       noteTitle.value = "";
       noteContent.value = "";
@@ -66,9 +70,11 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
       await invoke("update_note", {
-        id: Number(note[0]),
-        title: noteTitle.value,
-        content: noteContent.value,
+        note: {
+          id: Number(note[0]),
+          title: noteTitle.value,
+          content: noteContent.value,
+        },
       });
       await loadNotes();
     } catch (error) {
@@ -162,16 +168,22 @@ window.addEventListener("DOMContentLoaded", () => {
    * Saves the displayed note in a s3 bucket
    *
    * @async
+   * @param {number} id - The ID of the note to save.
    * @function saveNote
    * @returns {Promise<void>} A promise that resolves when the note is saved successfully.
    * @throws {Error} If an error occurs while saving the note.
    */
-  async function saveNote() {
+  async function saveNote(id) {
+    let notes = await invoke("read_notes");
+    const note = notes.find((note) => note[0] === id);
     try {
-      if (noteId.value) {
+      if (id && note) {
         const result = await invoke('save_note', {
-          title: noteTitle.value,
-          content: noteContent.value
+          note: {
+            id: Number(note[0]),
+            title: noteTitle.value,
+            content: noteContent.value,
+          },
         });
         console.log(result);
       } else {
@@ -180,6 +192,22 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       console.error("Error saving note:", error);
       alert("An error occurred while trying to save the note.");
+    }
+  }
+
+  /**
+   * Sends the notes to the cloud.
+   * @async
+   * @function sendNotesToCloud
+   * @throws {Error} If an error occurs while sending the notes to the cloud.
+   * @returns {Promise<void>} A promise that resolves when the notes are successfully sent to the cloud.
+   */
+  async function sendNotesToCloud() {
+    try {
+      await invoke("send_notes_to_cloud");
+    } catch (error) {
+      console.error("Error sending notes to cloud:", error);
+      alert("An error occurred while trying to send the notes to the cloud.");
     }
   }
 
