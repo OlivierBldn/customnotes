@@ -1,220 +1,248 @@
-const { invoke } = window.__TAURI__.tauri;
+// main.js
+
+import {
+  createLocalNote,
+  showLocalNote,
+  updateLocalNote,
+  deleteLocalNote,
+  loadLocalNotes,
+  deleteAllLocalNotes,
+} from "./localData.js";
+import {
+  createBucket,
+  updateBucketList,
+  loadBucketNotes,
+  uploadNoteToBucket,
+  showBucketNote,
+  updateBucketNote,
+  deleteBucket,
+  deleteBucketNote,
+  deleteBucketNotes,
+} from "./bucketData.js";
+
+export const { invoke } = window.__TAURI__.tauri;
+export const noteForm = document.querySelector("#note-form");
+export const noteId = document.querySelector("#note-id");
+export const noteTitle = document.querySelector("#note-title");
+export const noteContent = document.querySelector("#note-content");
+export const selectedNoteId = document.querySelector("#selected-note-id");
+
+// Initialize the Quill editor
+export const quill = new Quill("#editor", {
+  modules: {
+    toolbar: [
+      ["bold", "italic", "underline", "strike"],
+      ["blockquote", "code-block"],
+      [{ header: 1 }, { header: 2 }],
+      [{ list: "ordered" }, { list: "bullet" }],
+      [{ script: "sub" }, { script: "super" }],
+      [{ indent: "-1" }, { indent: "+1" }],
+      [{ direction: "rtl" }],
+      [{ size: ["small", false, "large", "huge"] }],
+      [{ header: [1, 2, 3, 4, 5, 6, false] }],
+      [{ color: [] }, { background: [] }],
+      [{ font: [] }],
+      [{ align: [] }],
+      ["clean"],
+    ],
+  },
+  theme: "snow",
+});
+
+// Reload the page when the reload button is clicked
+document.querySelector("#reload-button").addEventListener("click", function () {
+  location.reload();
+});
+
+// Format the timestamp to a human-readable format
+export function formatTimestamp(timestampText) {
+  if (timestampText === null) {
+    return "-";
+  }
+  let timestamp = Number(timestampText);
+  let date = new Date(timestamp * 1000);
+  let seconds = String(date.getSeconds()).padStart(2, "0");
+  let minutes = String(date.getMinutes()).padStart(2, "0");
+  let hours = String(date.getHours()).padStart(2, "0");
+  let day = String(date.getDate()).padStart(2, "0");
+  let month = String(date.getMonth() + 1).padStart(2, "0");
+  let year = date.getFullYear();
+  return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
+}
+
+// Format the timestamp to a human-readable format
+export function formatDateTime(timestampText) {
+  const timestamp = new Date(timestampText);
+  const day = String(timestamp.getDate()).padStart(2, "0");
+  const month = String(timestamp.getMonth() + 1).padStart(2, "0");
+  const year = String(timestamp.getFullYear()).slice(-2);
+  const hours = String(timestamp.getHours()).padStart(2, "0");
+  const minutes = String(timestamp.getMinutes()).padStart(2, "0");
+  const seconds = String(timestamp.getSeconds()).padStart(2, "0");
+  return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
+}
+
 
 window.addEventListener("DOMContentLoaded", () => {
-  const createNoteButton = document.querySelector("#create-note");
-  const noteId = document.querySelector("#note-id");
-  const noteTitle = document.querySelector("#note-title");
-  const noteContent = document.querySelector("#note-content");
-  const notesTableBody = document.querySelector("#notes-table-body");
+  const bucket = "olivier-rust-custom-notes";
+
   const cancelButton = document.querySelector("#cancel-button");
-  const selectedNoteId = document.querySelector("#selected-note-id");
-  // const saveButton = document.querySelector("#save-note");
-  const sendNotesToCloudButton = document.querySelector("#send-notes-to-cloud");
 
-  createNoteButton.addEventListener("click", createNote);
-  // saveButton.addEventListener("click", saveNote);
-  sendNotesToCloudButton.addEventListener("click", sendNotesToCloud);
+  document.body.addEventListener("click", (event) => {
+    event.preventDefault();
 
-  // Clear the input fields when the cancel button is clicked
-  cancelButton.addEventListener("click", () => {
-    noteId.value = "";
-    noteTitle.value = "";
-    noteContent.value = "";
-    selectedNoteId.textContent = '';
+    const targetId = event.target.id;
+
+    switch (targetId) {
+      case "cancel-button":
+        noteId.value = "";
+        noteTitle.value = "";
+        quill.setContents("");
+        selectedNoteId.textContent = "";
+        break;
+      case "create-local-note":
+        createLocalNote();
+        break;
+      case "show-local-note":
+        showLocalNote();
+        break;
+      case "update-local-note":
+        updateLocalNote();
+        break;
+      case "delete-local-note":
+        deleteLocalNote();
+        break;
+      case "create-bucket":
+        createBucket();
+        break;
+      case "delete-all-local-notes":
+        deleteAllLocalNotes();
+        break;
+      case "delete-bucket":
+        deleteBucket();
+        break;
+      case "upload-note-to-bucket":
+        uploadNoteToBucket();
+        break;
+      case "empty-bucket":
+        deleteBucketNotes();
+        break;
+      case "search-button":
+        searchInNote();
+        break;
+    }
+  });
+
+  const bucketList = document.querySelector("#bucket-list");
+
+  // Refresh the notes list when a bucket is selected
+  bucketList.addEventListener("change", async () => {
+    if (bucketList.value === "default") {
+      location.reload();
+    } else {
+      await loadBucketNotes();
+    }
   });
 
   /**
-   * Creates a new note by invoking the "create_note" function.
-   *
-   * @async
-   * @function createNote
-   * @returns {Promise<void>} A promise that resolves when the note is created successfully.
-   * @throws {Error} If an error occurs while creating the note.
+   * Performs a search in the notes based on the provided search query and location.
+   * @returns {Promise<void>} A promise that resolves when the search is complete.
    */
-  async function createNote() {
-    try {
-      await invoke("create_note", {
-        note: {
-          title: noteTitle.value,
-          content: noteContent.value,
-        },
-      });
-      noteTitle.value = "";
-      noteContent.value = "";
-      await loadNotes();
-    } catch (error) {
-      console.error("Error creating note:", error);
-      alert("An error occurred while trying to create the note.");
-    }
-  }
+  async function searchInNote() {
+    // Get the search query, search location, and bucket name from the input fields
+    const searchQuery = document.querySelector("#search-query").value;
+    const searchLocation = document.querySelector("#search-location").value;
+    const bucketName = document.querySelector("#bucket-list").value;
 
-  /**
-   * Updates a note with the specified ID.
-   *
-   * @async
-   * @param {number} id - The ID of the note to update.
-   * @returns {Promise<void>} - A promise that resolves when the note is successfully updated.
-   */
-  async function updateNote(id) {
-    if (!id) {
-      console.error("No id provided to updateNote");
-      alert("No id provided. Please select a note to update.");
+    // Validate the search query
+    if (!searchQuery) {
+      alert("Please enter a search query");
       return;
     }
+
+    // Prepare the arguments for the search command
+    let args = {
+      query: searchQuery,
+      local: searchLocation === "local",
+    };
+
+    // If the search location is "bucket", add the bucket name to the arguments
+    if (searchLocation === "bucket") {
+      args.bucket_name = bucketName;
+    }
+
     try {
-      let notes = await invoke("read_notes");
-      const note = notes.find((note) => note[0] === id);
-      if (!note) {
-        console.error("No note found with id:", id);
-        alert("Note not found. Please select a note to update.");
+      // Invoke the "execute_command" function with the search command and arguments
+      const searchResultsJson = await invoke("execute_command", {
+        command: "search_in_notes",
+        args: args,
+      });
+
+      // Parse the search results from the JSON response
+      const searchResults = JSON.parse(searchResultsJson);
+
+      // Handle the case when no results are found
+      if (searchResults.length === 0) {
+        alert("No result found");
         return;
       }
-      await invoke("update_note", {
-        note: {
-          id: Number(note[0]),
-          title: noteTitle.value,
-          content: noteContent.value,
-        },
-      });
-      await loadNotes();
-    } catch (error) {
-      console.error("Error updating note:", error);
-      alert("An error occurred while trying to update the note.");
-    }
-  }
 
-  /**
-   * Loads the notes from the server and populates the notes table.
-   *
-   * @async
-   * @function loadNotes
-   * @returns {Promise<void>} A promise that resolves when the notes are loaded and the table is populated.
-   * @throws {Error} If an error occurs while loading the notes.
-   */
-  async function loadNotes() {
-    try {
-      let notes = await invoke("read_notes");
-      notesTableBody.innerHTML = "";
-      notes.forEach((note, index) => {
-        const row = notesTableBody.insertRow();
-        row.className = index % 2 === 0 ? "even-row" : "odd-row";
-        row.innerHTML = `
-          <td>${note[0]}</td>
-          <td>${note[1]}</td>
-          <td>${note[2]}</td>
-          <td>
-            <button class="btn btn-primary" onclick="showNote(${note[0]})">Show</button>
-            <button class="btn btn-secondary" onclick="updateNote(${note[0]})">Update</button>
-            <button class="btn btn-danger" onclick="deleteNote(${note[0]})">Delete</button>
-          </td>
-        `;
-      });
-    } catch (error) {
-      console.error("Error loading notes:", error);
-      alert("An error occurred while trying to load the notes.");
-    }
-  }
-
-  /**
-   * Retrieves and displays a note with the specified ID.
-   *
-   * @async
-   * @param {number} id - The ID of the note to be shown.
-   * @returns {Promise<void>} - A promise that resolves when the note is shown successfully.
-   * @throws {Error} - If an error occurs while retrieving or displaying the note.
-   */
-  async function showNote(id) {
-    try {
-      let notes = await invoke("read_notes");
-      const note = notes.find((note) => note[0] === id);
-
-      if (note) {
-        noteId.value = note[0];
-        noteTitle.value = note[1];
-        noteContent.value = note[2];
-        selectedNoteId.textContent = 'Selected Note ID: ' + note[0];
-      } else {
-        alert("Note not found.");
-      }
-    } catch (error) {
-      console.error("Error showing note:", error);
-      alert("An error occurred while trying to show the note.");
-    }
-  }
-
-  /**
-   * Deletes a note with the specified ID.
-   *
-   * @async
-   * @param {number} id - The ID of the note to delete.
-   * @returns {Promise<void>} - A promise that resolves when the note is deleted.
-   * @throws {Error} - If an error occurs while deleting the note.
-   */
-  async function deleteNote(id) {
-    try {
-      await invoke("delete_note", { id: Number(id) });
-      selectedNoteId.textContent = '';
-      await loadNotes();
-      noteId.value = '';
-      noteTitle.value = '';
-      noteContent.value = '';
-    } catch (error) {
-      console.error("Error deleting note:", error);
-      alert("An error occurred while trying to delete the note.");
-    }
-  }
-
-  /**
-   * Saves the displayed note in a s3 bucket
-   *
-   * @async
-   * @param {number} id - The ID of the note to save.
-   * @function saveNote
-   * @returns {Promise<void>} A promise that resolves when the note is saved successfully.
-   * @throws {Error} If an error occurs while saving the note.
-   */
-  async function saveNote(id) {
-    let notes = await invoke("read_notes");
-    const note = notes.find((note) => note[0] === id);
-    try {
-      if (id && note) {
-        const result = await invoke('save_note', {
-          note: {
-            id: Number(note[0]),
-            title: noteTitle.value,
-            content: noteContent.value,
-          },
+      // Update the UI based on the search location
+      if (searchLocation === "local") {
+        const notesTableBody = document.querySelector("#notes-table-body");
+        notesTableBody.innerHTML = "";
+        searchResults.forEach((note, index) => {
+          const row = notesTableBody.insertRow();
+          row.className = index % 2 === 0 ? "even-row" : "odd-row";
+          row.innerHTML = `
+            <td>${note.title}</td>
+            <td>${formatTimestamp(note.created_at)}</td>
+            <td>${formatTimestamp(note.updated_at)}</td>
+            <td>
+              <button class="btn btn-primary" onclick="showBucketNote('${note.id}')">Show</button>
+              <button class="btn btn-secondary" onclick="updateBucketNote('${note.id}')">Update</button>
+              <button class="btn btn-danger" onclick="deleteBucketNote('${note.id}')">Delete</button>
+            </td>
+          `;
         });
-        console.log(result);
       } else {
-        await createNote();
+        const notesTableBody2 = document.querySelector("#notes-table-2-body");
+        notesTableBody2.innerHTML = "";
+        searchResults.forEach((note, index) => {
+          const row = notesTableBody2.insertRow();
+          row.className = index % 2 === 0 ? "even-row" : "odd-row";
+          row.innerHTML = `
+              <td>${note.title}</td>
+              <td>${formatDateTime(note.timestamp)}</td>
+              <td>
+                  <button class="btn btn-primary" onclick="showBucketNote('${
+                    note.uuid
+                  }')">Show</button>
+                  <button class="btn btn-secondary" onclick="updateBucketNote('${
+                    note.uuid
+                  }')">Update</button>
+                  <button class="btn btn-danger" onclick="deleteBucketNote('${
+                    note.uuid
+                  }')">Delete</button>
+              </td>
+          `;
+        });
       }
     } catch (error) {
-      console.error("Error saving note:", error);
-      alert("An error occurred while trying to save the note.");
-    }
-  }
-
-  /**
-   * Sends the notes to the cloud.
-   * @async
-   * @function sendNotesToCloud
-   * @throws {Error} If an error occurs while sending the notes to the cloud.
-   * @returns {Promise<void>} A promise that resolves when the notes are successfully sent to the cloud.
-   */
-  async function sendNotesToCloud() {
-    try {
-      await invoke("send_notes_to_cloud");
-    } catch (error) {
-      console.error("Error sending notes to cloud:", error);
-      alert("An error occurred while trying to send the notes to the cloud.");
+      console.error("Error searching in notes:", error);
+      alert("An error occurred while trying to search in the notes.");
     }
   }
 
   // Makes the methods globally available in the window element.
-  window.showNote = showNote;
-  window.updateNote = updateNote;
-  window.deleteNote = deleteNote;
+  window.showLocalNote = showLocalNote;
+  window.updateLocalNote = updateLocalNote;
+  window.deleteLocalNote = deleteLocalNote;
 
-  loadNotes();
+  window.showBucketNote = showBucketNote;
+  window.updateBucketNote = updateBucketNote;
+  window.deleteBucketNote = deleteBucketNote;
+
+  loadLocalNotes();
+  updateBucketList();
 });

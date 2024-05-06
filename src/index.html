@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Custom Notes App</title>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.0/dist/quill.snow.css" rel="stylesheet" />
     <script type="module" src="/main.js" defer></script>
 </head>
 
@@ -15,32 +16,64 @@
             <h1>Custom Notes</h1>
         </header>
         <main class="note-main">
+            <form id="bucket-form">
+                <input type="text" id="bucket-name" placeholder="Enter bucket name" required>
+                <button type="button" id="create-bucket" class="btn btn-primary">Create Bucket</button>
+                <button type="button" id="delete-bucket" class="btn btn-danger">Delete Bucket</button>
+                <button type="button" id="empty-bucket" class="btn btn-success">Empty Bucket</button>
+            </form>
+            <select id="bucket-list">
+            </select>
             <h3 id="selected-note-id"></h3>
             <form id="note-form">
                 <input type="hidden" id="note-id">
                 <input type="text" id="note-title" placeholder="Title" class="note-input">
+                <div id="editor">
                 <textarea id="note-content" placeholder="Content" class="note-textarea"></textarea>
+                </div>
+                <label for="search-location">Search Location:</label>
+                <select id="search-location">
+                    <option value="local">Local</option>
+                    <option value="bucket">Bucket</option>
+                </select>
+                <input type="text" id="search-query" placeholder="Search term in content" class="note-input">
+                <button id="search-button" class="btn btn-success">Search</button>
                 <div class="button-group">
                     <button type="button" id="cancel-button" class="btn btn-danger">Cancel</button>
-                    <!-- <button type="button" id="save-note" class="btn">Save</button> -->
-                    <button type="button" id="send-notes-to-cloud" class="btn btn-success">Send to Cloud</button>
-                    <button type="button" id="create-note" class="btn btn-primary">Create Note</button>
+                    <button id="reload-button">Reload</button>
+                    <button type="button" id="upload-note-to-bucket" class="btn">Upload Note To Bucket</button>
+                    <button type="button" id="create-local-note" class="btn btn-primary">Create Note</button>
+                    <button type="button" id="delete-all-local-notes" class="btn btn-danger">Empty Local Database</button>
                 </div>
             </form>
+            <section style="display: flex;">
             <table id="notes-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Title</th>
-                        <th>Content</th>
+                        <th>Created</th>
+                        <th>Updated</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="notes-table-body">
                 </tbody>
             </table>
+            <table id="notes-table-2">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="notes-table-2-body">
+                </tbody>
+            </table>
+        </section>
         </main>
     </section>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.0/dist/quill.js"></script>
 </body>
 
 </html>
