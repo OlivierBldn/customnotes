@@ -5,6 +5,7 @@ use rusqlite::Result;
 use s3::types::{ BucketLocationConstraint, CreateBucketConfiguration, Tag, Tagging };
 use crate::{ local_operations, models::Note, models::BucketError };
 use std::collections::HashMap;
+use notify_rust::Notification;
 
 
 /// Creates a new Amazon S3 bucket.
@@ -95,6 +96,12 @@ pub async fn create_bucket(bucket_name: &str) -> Result<(), BucketError> {
         Ok(_) => (),
         Err(err) => return Err(BucketError::S3Error(Box::new(err))),
     }
+
+    // Send a desktop notification
+    Notification::new()
+    .summary("New bucket created")
+    .body(&format!("Bucket with name '{}' was created.", bucket_name))
+    .show().unwrap();
 
     Ok(())
 }
@@ -228,6 +235,12 @@ pub async fn delete_bucket(bucket_name: &str) -> Result<(), s3::Error> {
     // Send a request to delete the specified bucket
     s3_client.delete_bucket().bucket(bucket_name).send().await?;
 
+    // Send a desktop notification
+    Notification::new()
+    .summary("Bucket deleted")
+    .body(&format!("Bucket with name '{}' was deleted.", bucket_name))
+    .show().unwrap();
+
     Ok(())
 }
 
@@ -307,6 +320,12 @@ pub async fn upload_note_to_bucket(bucket_name: &str, note: Note) -> Result<Stri
     // Check if the upload was successful or return an error
     match put_object {
         Ok(_) => {
+            // Send a desktop notification
+            Notification::new()
+            .summary("Note uploaded")
+            .body(&format!("Note with title {} was uploaded to bucket {}.", note.title, bucket_name))
+            .show().unwrap();
+
             Ok("Object uploaded successfully".to_string())
         },
         Err(e) => {
@@ -474,6 +493,12 @@ pub async fn update_bucket_note (bucket: &str, note: Note) -> Result<(), Box<dyn
                     .send()
                     .await?;
 
+                // Send a desktop notification
+                Notification::new()
+                .summary("Bucket note updated")
+                .body(&format!("Note with title {} was updated.", key))
+                .show().unwrap();
+
                 return Ok(());
             }
         }
@@ -542,6 +567,13 @@ pub async fn delete_bucket_note (bucket: &str, uuid: &str) -> Result<(), Box<dyn
                     .key(&key)
                     .send()
                     .await?;
+
+                // Send a desktop notification
+                Notification::new()
+                .summary("Bucket note deleted")
+                .body(&format!("Note with title {} was deleted.", key))
+                .show().unwrap();
+
                 return Ok(());
             }
         }
@@ -680,6 +712,12 @@ pub async fn delete_bucket_notes(bucket_name: &str) -> Result<(), Box<dyn std::e
             }
         }
     }
+
+    // Send a desktop notification
+    Notification::new()
+    .summary("Bucket notes deleted")
+    .body(&format!("Notes from bucket {} were deleted.", bucket_name))
+    .show().unwrap();
 
     Ok(())
 }

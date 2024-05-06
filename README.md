@@ -25,6 +25,7 @@ This template is developped using Tauri in vanilla HTML, CSS and Javascript.
   - Searching notes based on queries and optional parameters like local or S3 bucket storage.
   - Ability to handle CRUD operations for notes both locally and on S3.
   - Error handling specific to note fetching and storage operations.
+  - **Desktop Notifications**: Implementation of desktop notifications using `notify-rust` to improve user experience.
 
 ## Asynchronous Operations
 - **Asynchronous Command Execution**: Commands are executed asynchronously, ensuring non-blocking operations that enhance performance.
@@ -177,6 +178,7 @@ bytes = "1.0"
 chrono = "0.4.38"
 tantivy = "0.22.0"
 dirs = "5.0.1"
+notify-rust = "4.11.0"
 ```
 
 This section lists the dependencies for your package. These are libraries that your package depends on. Each dependency is listed with its version number. Some dependencies also have features specified.
@@ -194,6 +196,7 @@ This section lists the dependencies for your package. These are libraries that y
 - `chrono`: A date and time library.
 - `tantivy`: A full-text search engine library.
 - `dirs`: A library for finding various standard directories.
+- `notify-rust`: A library for displaying desktop notifications.
 
 ## Features Section
 

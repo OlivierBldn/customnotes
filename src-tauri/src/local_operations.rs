@@ -6,6 +6,8 @@ use rusqlite::{params, Connection, Result};
 use lazy_static::lazy_static;
 use uuid::Uuid;
 use dirs;
+use notify_rust::Notification;
+
 
 lazy_static! {
  /// Establishes a connection to a SQLite database and creates a table for notes if it doesn't exist.
@@ -84,6 +86,13 @@ pub async fn create_local_note(note: Note) -> Result<Note, String> {
         "INSERT INTO notes (uuid, title, content, created_at, timestamp) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![uuid, note.title, note.content, now, timestamp],
     ).map_err(|e| e.to_string())?;
+
+    // Send a desktop notification
+    Notification::new()
+    .summary("New note created")
+    .body(&format!("Note with title '{}' was created.", note.title))
+    .show().unwrap();
+
     Ok(Note {
         id: None,
         uuid: Some(uuid),
@@ -161,6 +170,14 @@ pub async fn update_local_note(note: Note) -> Result<(), String> {
         "UPDATE notes SET title = ?1, content = ?2, updated_at = ?3, timestamp = ?4 WHERE id = ?5",
         params![note.title, note.content, now, timestamp, note.id],
     ).map_err(|e| e.to_string())?;
+
+    // Send a desktop notification
+    Notification::new()
+    .summary("Local note updated")
+    .body(&format!("Note with title '{}' was upated.", note.title))
+    .show().unwrap();
+
+
     Ok(())
 }
 
@@ -184,6 +201,13 @@ pub fn delete_local_note(id: i64) -> Result<(), String> {
         "DELETE FROM notes WHERE id = ?1",
         params![id],
     ).map_err(|e| e.to_string())?;
+
+    // Send a desktop notification
+    Notification::new()
+    .summary("Local note deleted")
+    .body(&format!("Note with id '{}' was deleted.", id))
+    .show().unwrap();
+
     Ok(())
 }
 
@@ -231,6 +255,14 @@ pub async fn delete_all_local_notes() -> Result<(), String> {
         "DELETE FROM notes",
         [],
     ).map_err(|e| e.to_string())?;
+
+    // Send a desktop notification
+    Notification::new()
+    .summary("Local notes deleted")
+    .body(&format!("Your local notes were deleted."))
+    .show().unwrap();
+
+        
     Ok(())
 }
 

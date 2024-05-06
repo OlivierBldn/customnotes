@@ -28,6 +28,7 @@ bytes = "1.0"
 chrono = "0.4.38"
 tantivy = "0.22.0"
 dirs = "5.0.1"
+notify-rust = "4.11.0"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
