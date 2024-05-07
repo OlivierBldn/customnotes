@@ -255,3 +255,147 @@ export async function deleteAllLocalNotes() {
     alert("An error occurred while trying to delete all notes.");
   }
 }
+
+
+// export async function exportNotes() {
+//   const notes = JSON.parse(
+//     await invoke("execute_command", { command: "get_local_notes", args: "" })
+//   );
+
+//   // Create a new Quill instance with a temporary container
+//   const quille = new Quill(document.createElement('div'));
+
+//   notes.forEach(note => {
+//     // Parse the content as JSON to get the Delta
+//     const delta = JSON.parse(note.content);
+
+//     // Set the Quill contents to the Delta
+//     quille.setContents(delta);
+
+//     // Get the plain text from the Quill editor
+//     note.content = quille.getText();
+//   });
+
+//   console.log(notes);
+//   // Continue with your existing code to export the notes...
+// }
+
+
+// async function exportNotesAsJSON(notes) {
+//   // Create a new Quill instance
+//   const quill = new Quill('#editor');
+
+//   notes.forEach(note => {
+//     // Parse the content as JSON to get the Delta
+//     const delta = JSON.parse(note.content);
+
+//     // Set the Quill contents to the Delta
+//     quill.setContents(delta);
+
+//     // Get the plain text from the Quill editor
+//     note.content = quill.getText();
+//   });
+
+//   const dataStr = JSON.stringify(notes);
+//   await invoke("execute_command", { command: "export_as_json", args: dataStr });
+// }
+
+async function exportNotesAsJSON(notes) {
+  // Create a new Quill instance
+  const quill = new Quill('#editor');
+
+  notes.forEach(note => {
+    // Parse the content as JSON to get the Delta
+    const delta = JSON.parse(note.content);
+
+    // Set the Quill contents to the Delta
+    quill.setContents(delta);
+
+    // Get the plain text from the Quill editor
+    note.content = quill.getText();
+  });
+
+  const dataStr = JSON.stringify(notes, null, 2);
+  const dataBlob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(dataBlob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'notes.json';
+  link.click();
+
+  URL.revokeObjectURL(url);
+
+
+}
+
+// function exportNotesAsMarkdown(notes) {
+//   let markdownContent = "";
+//   notes.forEach(note => {
+//       markdownContent += `# ${note.title}\n\n${note.content}\n\n`;
+//   });
+//   const blob = new Blob([markdownContent], { type: "text/plain" });
+//   const url = URL.createObjectURL(blob);
+//   const link = document.createElement('a');
+//   link.href = url;
+//   link.download = "notes.md";
+//   document.body.appendChild(link);
+//   link.click();
+//   document.body.removeChild(link);
+// }
+
+// Export notes as Markdown
+function exportNotesAsMarkdown(notes) {
+  let markdownContent = "";
+  notes.forEach(note => {
+    markdownContent += `# ${note.title}\n\n${note.content}\n\n`;
+  });
+
+  const blob = new Blob([markdownContent], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = "notes.md";
+  link.click();
+
+  URL.revokeObjectURL(url);
+}
+
+
+// Export notes as PDF
+function exportNotesAsPDF(notes) {
+  const doc = new jsPDF();
+  let y = 10;
+
+  notes.forEach((note, index) => {
+    const lines = doc.splitTextToSize(note.content, 180);
+    doc.setFontSize(12); 
+    doc.text(note.title, 10, y);
+    y += 10;
+    doc.setFontSize(16); 
+    doc.text(lines, 10, y);
+    y += lines.length * 10;
+  });
+
+  doc.save("notes.pdf");
+}
+
+export async function exportNotes(format) {
+  const response = await invoke("execute_command", { command: "get_local_notes", args: "" });
+  const notes = JSON.parse(response);
+
+  switch (format) {
+      case 'pdf':
+          exportNotesAsPDF(notes);
+          break;
+      case 'json':
+          exportNotesAsJSON(notes);
+          break;
+      case 'markdown':
+          exportNotesAsMarkdown(notes);
+          break;
+      default:
+          console.error("Unsupported format:", format);
+  }
+}

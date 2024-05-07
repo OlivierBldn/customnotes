@@ -7,6 +7,7 @@ import {
   deleteLocalNote,
   loadLocalNotes,
   deleteAllLocalNotes,
+  exportNotes,
 } from "./localData.js";
 import {
   createBucket,
@@ -26,6 +27,9 @@ export const noteId = document.querySelector("#note-id");
 export const noteTitle = document.querySelector("#note-title");
 export const noteContent = document.querySelector("#note-content");
 export const selectedNoteId = document.querySelector("#selected-note-id");
+const searchQuery = document.querySelector("#search-query");
+const searchLocation = document.querySelector("#search-location");
+const bucketName = document.querySelector("#bucket-name");
 
 // Initialize the Quill editor
 export const quill = new Quill("#editor", {
@@ -100,6 +104,9 @@ window.addEventListener("DOMContentLoaded", () => {
         noteForm.dataset.noteId = "";
         quill.setContents("");
         selectedNoteId.textContent = "";
+        searchQuery.value = "";
+        searchLocation.value = "local";
+        bucketName.value = "";
         break;
       case "create-local-note":
         createLocalNote();
@@ -130,6 +137,9 @@ window.addEventListener("DOMContentLoaded", () => {
         break;
       case "search-button":
         searchInNote();
+        break;
+      case "export-notes":
+        exportNotes();
         break;
     }
   });
@@ -243,6 +253,8 @@ window.addEventListener("DOMContentLoaded", () => {
   window.showBucketNote = showBucketNote;
   window.updateBucketNote = updateBucketNote;
   window.deleteBucketNote = deleteBucketNote;
+
+  window.exportNotes = exportNotes;
 
   loadLocalNotes();
   updateBucketList();

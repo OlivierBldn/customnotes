@@ -61,6 +61,7 @@ body {
 .button-group {
   display: flex;
   justify-content: space-between;
+  margin-top: 20px;
 }
 
 .btn {
@@ -102,7 +103,7 @@ body {
 .button-group {
   display: flex;
   justify-content: space-between;
-  margin: 0 0 40px 0;
+  margin: 40px 0;
 }
 
 table {
@@ -143,4 +144,14 @@ th:last-child, td:last-child {
 
 #selected-note-id {
   margin-bottom: 1rem;
+}
+
+select {
+  display: inline-block;
+  margin: 20px 0;
+}
+
+#bucket-name {
+  margin: 20px 0;
+  padding: 10px;
 }
