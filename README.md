@@ -27,6 +27,7 @@ This template is developped using Tauri in vanilla HTML, CSS and Javascript.
   - Error handling specific to note fetching and storage operations.
   - **Desktop Notifications**: Implementation of desktop notifications using `notify-rust` to improve user experience.
   - **Content Encryption**: Encryption of the content of the notes for more safety using `ring` and `base64`.
+  - **Import/Export**: Import notes using json/md/csv file, export notes to json/md/pdf formats.
 
 
 ## Asynchronous Operations
@@ -125,6 +126,43 @@ Tauri : https://tauri.app/fr/v1/guides/getting-started/prerequisites
 ```
 
 ### Congrats, you're all set to use the app !
+
+### To try the Import Feature refer yourself to these models
+
+#### JSON Sample
+
+```json
+[
+    {
+      "title": "First JSON note",
+      "content": "<p>This is the first JSON note.</p>"
+    },
+    {
+      "title": "Second JSON note",
+      "content": "<p>This is the second JSON note.</p>"
+    }
+]
+```
+
+#### CSV Sample
+
+```
+Title,Content
+First CSV note,"<p>This is the first CSV note.</p>"
+Second CSV note,"<p>This is the second CSV note.</p>"
+```
+
+#### Markdown Sample
+
+```
+# First MD Note
+
+This is the first MD note.
+
+# Second MD Note
+
+This is the second MD note.
+```
 
 ---
 
