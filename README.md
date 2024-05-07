@@ -26,6 +26,8 @@ This template is developped using Tauri in vanilla HTML, CSS and Javascript.
   - Ability to handle CRUD operations for notes both locally and on S3.
   - Error handling specific to note fetching and storage operations.
   - **Desktop Notifications**: Implementation of desktop notifications using `notify-rust` to improve user experience.
+  - **Content Encryption**: Encryption of the content of the notes for more safety using `ring` and `base64`.
+
 
 ## Asynchronous Operations
 - **Asynchronous Command Execution**: Commands are executed asynchronously, ensuring non-blocking operations that enhance performance.
@@ -179,6 +181,8 @@ chrono = "0.4.38"
 tantivy = "0.22.0"
 dirs = "5.0.1"
 notify-rust = "4.11.0"
+ring = "0.17.8"
+base64 = "0.22.1"
 ```
 
 This section lists the dependencies for your package. These are libraries that your package depends on. Each dependency is listed with its version number. Some dependencies also have features specified.
@@ -197,6 +201,8 @@ This section lists the dependencies for your package. These are libraries that y
 - `tantivy`: A full-text search engine library.
 - `dirs`: A library for finding various standard directories.
 - `notify-rust`: A library for displaying desktop notifications.
+- `ring`: A library for cryptography.
+- `base64`: A library for encoding and decoding base64 as bytes or utf8.
 
 ## Features Section
 
@@ -566,6 +572,22 @@ Validates the title and content of a note.
 - `Ok(())` if the parameters are valid.
 - `Err(String)` if an error occurs.
 
+### `derive_nonce_from_id`
+
+Derives the nonce from the note ID in the local database.
+
+#### Parameters
+
+- `id`: The ID of the note to derive the nonce from.
+
+#### Returns
+
+- Returns a `Result` containing the derived nonce as a `String` if it exists, or an `Err` if the nonce is not found or an error occurs.
+
+#### Errors
+
+This function will return an error if there is an issue with the database connection or if the note with the specified ID does not exist.
+
 ---
 
 # `s3_operations.rs` Documentation
@@ -705,6 +727,30 @@ Deletes all notes from an Amazon S3 bucket.
 
 - `Ok(())` if the operation is successful.
 - `Err(Box<dyn std::error::Error>)` if the operation fails or if there is an error in the response.
+
+### `decrypt_note_content`
+
+Decrypts the content of a note using the provided encrypted content and note ID.
+
+#### Parameters
+
+- `encrypted_content`: The encrypted content of the note.
+- `note_id`: The ID of the note.
+
+#### Returns
+
+- Returns a `Result` containing the decrypted content as a `String` if the decryption is successful.
+- If the decryption fails, an `Err` with a `String` describing the error is returned.
+
+#### Errors
+
+This function will return an error if any of the following conditions are met:
+- Failed to derive the nonce from the note ID.
+- Failed to decode the encrypted content.
+- Failed to decode the nonce.
+- Failed to convert the nonce to an array.
+- Failed to generate the encryption key.
+- Failed to decrypt the content.
 
 ---
 
@@ -988,3 +1034,9 @@ Deletes all notes from the selected bucket.
 
 - A promise that resolves when all notes are deleted successfully.
 - Throws an error if an error occurs while deleting the notes.
+
+---
+
+# `test_example.rs` Documentation
+
+This file contains an example of test implementation if eventually you wish to implement some changes to the app

@@ -300,9 +300,22 @@ pub async fn search_in_notes(query_str: &str, local: bool, bucket_name: Option<&
     let notes = if local {
         local_operations::get_local_notes().await?
     } else {
+        // let bucket_name = bucket_name
+        //     .map(|name| name.trim_matches('"'))
+        //     .ok_or("Bucket name is required when local is false")?;
+        // let bucket_notes = s3_operations::fetch_bucket_notes(bucket_name).await?;
+        // bucket_notes.into_iter().map(|(title, last_modified, metadata, content)| {
+        //     let (uuid, timestamp) = metadata.map_or((String::new(), String::new()), |map| {
+        //         let uuid = map.get("uuid").cloned().unwrap_or_else(String::new);
+        //         let timestamp = map.get("timestamp").cloned().unwrap_or_else(String::new);
+        //         (uuid, timestamp)
+        //     });
+        //     (0, uuid, title, content, 0, last_modified.map(|lm| lm.parse::<i64>().unwrap_or(0)), Some(timestamp))
+        // }).collect::<Vec<_>>()
+
         let bucket_name = bucket_name
-            .map(|name| name.trim_matches('"'))
-            .ok_or("Bucket name is required when local is false")?;
+        .map(|name| name.trim_matches('"'))
+        .ok_or("Bucket name is required when local is false")?;
         let bucket_notes = s3_operations::fetch_bucket_notes(bucket_name).await?;
         bucket_notes.into_iter().map(|(title, last_modified, metadata, content)| {
             let (uuid, timestamp) = metadata.map_or((String::new(), String::new()), |map| {
@@ -310,22 +323,31 @@ pub async fn search_in_notes(query_str: &str, local: bool, bucket_name: Option<&
                 let timestamp = map.get("timestamp").cloned().unwrap_or_else(String::new);
                 (uuid, timestamp)
             });
-            (0, uuid, title, content, 0, last_modified.map(|lm| lm.parse::<i64>().unwrap_or(0)), Some(timestamp))
+            Note {
+                id: Some(0),
+                uuid: Some(uuid),
+                title,
+                content,
+                nonce: None,
+                created_at: 0,
+                updated_at: last_modified.map(|lm| lm.parse::<i64>().unwrap_or(0)),
+                timestamp: Some(timestamp),
+            }
         }).collect::<Vec<_>>()
     };
 
     // Index the notes
     for note in &notes {
         let mut doc = TantivyDocument::new();
-        doc.add_text(title_field, &note.2);
-        doc.add_text(content_field, &note.3);
-        doc.add_i64(id_field, note.0);
-        doc.add_text(uuid_field, &note.1);
-        doc.add_i64(created_at_field, note.4);
-        if let Some(updated_at) = note.5 {
+        doc.add_text(title_field, &note.title);
+        doc.add_text(content_field, &note.content);
+        doc.add_i64(id_field, note.id.unwrap_or(0));
+        doc.add_text(uuid_field, note.uuid.as_ref().unwrap_or(&"".to_string()));
+        doc.add_i64(created_at_field, note.created_at);
+        if let Some(updated_at) = note.updated_at {
             doc.add_i64(updated_at_field, updated_at);
         }
-        if let Some(timestamp) = &note.6 {
+        if let Some(timestamp) = &note.timestamp {
             doc.add_text(timestamp_field, timestamp);
         }
         let _ = index_writer.add_document(doc);
@@ -395,6 +417,7 @@ pub async fn search_in_notes(query_str: &str, local: bool, bucket_name: Option<&
             uuid,
             title,
             content,
+            nonce: None,
             created_at,
             updated_at,
             timestamp,
@@ -418,40 +441,4 @@ async fn main() {
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
-}
-
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_transform_bucket_notes() {
-
-        let mut map1 = HashMap::new();
-        map1.insert("timestamp".to_string(), "2024-05-05T02:51:00.732617662+00:00".to_string());
-        map1.insert("uuid".to_string(), "8d5572eb-b4a0-4697-b551-fff4de57f17e".to_string());
-
-        let mut map2 = HashMap::new();
-        map2.insert("timestamp".to_string(), "2024-05-05T02:19:16.798625250+00:00".to_string());
-        map2.insert("uuid".to_string(), "da1417b4-17b9-47a6-84fe-ea049d223cc3".to_string());
-
-        // Arrange
-        let bucket_notes = vec![
-            ("title1.txt".to_string(), Some("2024-05-05T02:51:01Z".to_string()), Some(map1), "content1".to_string()),
-            ("title2.txt".to_string(), Some("2024-05-05T02:19:17Z".to_string()), Some(map2), "content2".to_string()),
-        ];
-        let expected_output = vec![
-            (0, "title1.txt".to_string(), "content1".to_string(), String::new(), 0, None::<String>, None::<String>),
-            (0, "title2.txt".to_string(), "content2".to_string(), String::new(), 0, None::<String>, None::<String>),
-        ];
-
-        // Act
-        let output: Vec<_> = bucket_notes.into_iter().map(|(title, _, _, content)| {
-            (0, title, content, String::new(), 0, None, None)
-        }).collect();
-
-        // Assert
-        assert_eq!(output, expected_output);
-    }
 }

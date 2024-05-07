@@ -29,6 +29,8 @@ chrono = "0.4.38"
 tantivy = "0.22.0"
 dirs = "5.0.1"
 notify-rust = "4.11.0"
+ring = "0.17.8"
+base64 = "0.22.1"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

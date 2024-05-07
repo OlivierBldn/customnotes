@@ -13,6 +13,7 @@ pub struct Note {
     pub uuid: Option<String>,
     pub title: String,
     pub content: String,
+    pub nonce: Option<String>,
     pub created_at: i64,
     pub updated_at: Option<i64>,
     pub timestamp: Option<String>,

@@ -163,7 +163,7 @@ export async function uploadNoteToBucket() {
     await invoke("execute_command", { command: "get_local_notes", args: "" })
   );
   const id = noteForm.dataset.noteId;
-  const note = notes.find((note) => note[0] === Number(id));
+  const note = notes.find((note) => note.id === Number(id));
 
   try {
     if (note) {
@@ -172,13 +172,14 @@ export async function uploadNoteToBucket() {
         args: {
           bucket_name: bucketList.value,
           note: {
-            id: Number(note[0]),
-            uuid: note[1],
-            title: note[2],
-            content: note[3],
-            created_at: Number(note[4]),
-            updated_at: Number(note[5]),
-            timestamp: note[6],
+            id: Number(note.id),
+            uuid: note.uuid,
+            title: note.title,
+            content: note.content,
+            nonce: null,
+            created_at: Number(note.created_at),
+            updated_at: Number(note.updated_at),
+            timestamp: note.timestamp,
           },
         },
       });
@@ -230,10 +231,26 @@ export async function showBucketNote(noteUuid) {
 
     noteId.value = note.id;
     noteTitle.value = note.title;
-    let noteContent =
-      typeof note.content === "string"
-        ? JSON.parse(note.content)
-        : note.content;
+    let noteContent;
+    if (typeof note.content === "string") {
+      let jsonEndIndex = note.content.lastIndexOf('}') + 1;
+      let jsonPart = note.content.substring(0, jsonEndIndex);
+      let nonJsonPart = note.content.substring(jsonEndIndex);
+    
+      if (jsonPart.startsWith('{') || jsonPart.startsWith('[')) {
+        try {
+          noteContent = JSON.parse(jsonPart);
+        } catch (error) {
+          console.error("Error parsing note content:", error);
+          alert("An error occurred while trying to parse the note content.");
+          return;
+        }
+      } else {
+        noteContent = note.content;
+      }
+    } else {
+      noteContent = note.content;
+    }
     quill.setContents(noteContent);
   } catch (error) {
     console.error("Error showing note:", error);

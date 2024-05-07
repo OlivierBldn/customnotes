@@ -6,6 +6,9 @@ use s3::types::{ BucketLocationConstraint, CreateBucketConfiguration, Tag, Taggi
 use crate::{ local_operations, models::Note, models::BucketError };
 use std::collections::HashMap;
 use notify_rust::Notification;
+use ring::aead::{Aad, Nonce, LessSafeKey, UnboundKey, CHACHA20_POLY1305};
+use ring::rand::{SecureRandom, SystemRandom};
+use base64::{Engine as _, engine::general_purpose};
 
 
 /// Creates a new Amazon S3 bucket.
@@ -256,7 +259,8 @@ pub async fn delete_bucket(bucket_name: &str) -> Result<(), s3::Error> {
 ///
 /// * A connection to the Amazon S3 service is established using the AWS SDK for Rust.
 /// * The region for the S3 service is set to "eu-west-3".
-/// * The content of the note is converted to bytes and then to a ByteStream.
+/// * The content of the note is encrypted using a randomly generated key and nonce.
+/// * The encrypted content is converted to bytes and then to a ByteStream.
 /// * The title of the note is used as the base name of the file, with ".txt" appended to it.
 /// * The file is uploaded to the specified S3 bucket.
 /// * The content type of the file is set to "text/plain".
@@ -281,6 +285,27 @@ pub async fn upload_note_to_bucket(bucket_name: &str, note: Note) -> Result<Stri
         }
     }
 
+    // // Decrypt the note content before uploading
+    // // If used note parameter for function upload_note_to_bucket needs to be mutable
+    // let decrypted_content = match note.id {
+    //     Some(id) => {
+    //         match decrypt_note_content(&note.content, id).await {
+    //             Ok(content) => content,
+    //             Err(e) => {
+    //                 println!("Error: {}", e);
+    //                 return Err(e);
+    //             }
+    //         }
+    //     },
+    //     None => {
+    //         println!("Error: Note id is None");
+    //         return Err("Note id is None".to_string());
+    //     }
+    // };
+    // note.content = decrypted_content;
+
+    
+
     // Configure the AWS SDK with the desired region
     let myconfig = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new("eu-west-3"))
@@ -290,13 +315,35 @@ pub async fn upload_note_to_bucket(bucket_name: &str, note: Note) -> Result<Stri
 
     // Convert the content of the note to bytes and create a ByteStream
     let input_string = note.content.as_bytes().to_vec();
-    let bytestream = s3::primitives::ByteStream::from(input_string);
+
+    // Generate a random nonce
+    let rng = SystemRandom::new();
+    let mut nonce = [0u8; 12];
+    rng.fill(&mut nonce).unwrap();
+    let nonce = Nonce::assume_unique_for_key(nonce);
+
+    // Convert the nonce to a byte slice and then encode it
+    let nonce_str = general_purpose::STANDARD.encode(nonce.as_ref());
+
+    // Generate a random key
+    let crypt_key = UnboundKey::new(&CHACHA20_POLY1305, &[0; 32]).unwrap();
+    let crypt_key = LessSafeKey::new(crypt_key);
+
+    // Encrypt the content and create a ByteStream
+    let mut in_out = input_string.clone();
+    crypt_key.seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out).unwrap();
+
+    let bytestream = s3::primitives::ByteStream::from(in_out);
 
     // Generate the filename for the note by appending ".txt" to the title
     let filename = format!("{}.txt", note.title);
 
     // Get the UUID of the note from the local storage
-    let uuid = local_operations::get_local_note(note.id.unwrap()).await?.uuid.unwrap();
+    let note_result = local_operations::get_local_note(note.id.unwrap()).await;
+    let uuid = match note_result {
+        Ok(note) => note.uuid.unwrap(),
+        Err(e) => return Err(format!("Failed to get local note: {}", e)),
+    };
 
     // Get the current timestamp
     let timestamp = chrono::Utc::now().to_rfc3339();
@@ -313,6 +360,7 @@ pub async fn upload_note_to_bucket(bucket_name: &str, note: Note) -> Result<Stri
         .metadata("timestamp", &timestamp)
         .metadata("created_at", &created_at)
         .metadata("updated_at", &updated_at)
+        .metadata("nonce", &nonce_str)
         .body(bytestream)
         .content_type("text/plain")
         .send().await;
@@ -392,7 +440,32 @@ pub async fn fetch_bucket_note(bucket: &str, uuid: &str) -> Result<Note, Box<dyn
                 while let Some(bytes) = object.body.try_next().await? {
                     body.extend_from_slice(&bytes);
                 }
-                let body_str = String::from_utf8(body)?;
+
+                // Retrieve the nonce from the metadata and convert it from a base64 string
+                let nonce_str = metadata.get("nonce").map(|s| s.clone()).unwrap_or_else(|| String::from(""));
+                let nonce_bytes = match general_purpose::STANDARD.decode(&nonce_str) {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
+                        eprintln!("Failed to decode nonce");
+                        return Err("Failed to decode nonce".into());
+                    }
+                };
+                if nonce_bytes.len() != 12 {
+                    eprintln!("Nonce has wrong length");
+                    return Err("Nonce has wrong length".into());
+                }
+                let nonce_array: [u8; 12] = nonce_bytes.try_into().unwrap();
+                let nonce = Nonce::assume_unique_for_key(nonce_array);
+
+                // Generate a random key
+                let crypt_key = UnboundKey::new(&CHACHA20_POLY1305, &[0; 32]).unwrap();
+                let crypt_key = LessSafeKey::new(crypt_key);
+
+                // Decrypt the content
+                let decrypted_content = crypt_key.open_in_place(nonce, Aad::empty(), &mut body).unwrap();
+
+                // Convert the decrypted content to a string
+                let body_str = String::from_utf8(decrypted_content.to_vec())?;
 
                 // Extract the creation timestamp from the metadata
                 let created_at = metadata.get("created_at").unwrap_or(&String::from("")).clone();
@@ -403,6 +476,7 @@ pub async fn fetch_bucket_note(bucket: &str, uuid: &str) -> Result<Note, Box<dyn
                     uuid: Some(uuid.to_string()),
                     title: key,
                     content: body_str,
+                    nonce: Some(nonce_str),
                     created_at: created_at.parse::<i64>().unwrap_or(0),
                     updated_at: Some(chrono::Utc::now().timestamp()),
                     timestamp: metadata.get("timestamp").map(|s| s.to_string()),
@@ -418,7 +492,7 @@ pub async fn fetch_bucket_note(bucket: &str, uuid: &str) -> Result<Note, Box<dyn
 }
 
 
-/// Updates a note in an Amazon S3 bucket based on its UUID.
+// Updates a note in an Amazon S3 bucket based on its UUID.
 ///
 /// # Parameters
 ///
@@ -432,9 +506,10 @@ pub async fn fetch_bucket_note(bucket: &str, uuid: &str) -> Result<Note, Box<dyn
 /// * The list of objects in the bucket is retrieved using the `list_objects_v2` API.
 /// * For each object, the `head_object` API is called to retrieve the metadata associated with the object.
 /// * If the object has a metadata field with key "uuid" and value matching the UUID of the note, the object is considered as the note to be updated.
-/// * The content of the note is converted to bytes and then to a `ByteStream`.
-/// * The note is updated by uploading the new content to the object in the bucket.
+/// * The content of the note is encrypted using a randomly generated key and nonce.
+/// * The encrypted content is converted to bytes and then to a `ByteStream`.
 /// * The metadata fields "uuid" and "timestamp" are updated with the UUID and current timestamp of the note.
+/// * The note is updated by uploading the new content to the object in the bucket.
 ///
 /// # Returns
 ///
@@ -477,7 +552,25 @@ pub async fn update_bucket_note (bucket: &str, note: Note) -> Result<(), Box<dyn
             if metadata.get("uuid").map(|s| s.as_str()) == Some(&uuid) {
                 // Convert the content of the note to bytes and then to a ByteStream
                 let input_string = note.content.as_bytes().to_vec();
-                let bytestream = s3::primitives::ByteStream::from(input_string);
+
+                // Generate a random nonce
+                let rng = SystemRandom::new();
+                let mut nonce = [0u8; 12];
+                rng.fill(&mut nonce).unwrap();
+                let nonce = Nonce::assume_unique_for_key(nonce);
+
+                // Convert the nonce to a byte slice and then encode it
+                let nonce_str = general_purpose::STANDARD.encode(nonce.as_ref());
+
+                // Generate a random key
+                let crypt_key = UnboundKey::new(&CHACHA20_POLY1305, &[0; 32]).unwrap();
+                let crypt_key = LessSafeKey::new(crypt_key);
+
+                // Encrypt the content and create a ByteStream
+                let mut in_out = input_string.clone();
+                crypt_key.seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out).unwrap();
+                
+                let bytestream = s3::primitives::ByteStream::from(in_out);
 
                 // Get the current timestamp
                 let timestamp = chrono::Utc::now().to_rfc3339();
@@ -488,6 +581,7 @@ pub async fn update_bucket_note (bucket: &str, note: Note) -> Result<(), Box<dyn
                     .key(&key)
                     .metadata("uuid", &uuid)
                     .metadata("timestamp", &timestamp)
+                    .metadata("nonce", &nonce_str)
                     .body(bytestream)
                     .content_type("text/plain")
                     .send()
@@ -584,7 +678,6 @@ pub async fn delete_bucket_note (bucket: &str, uuid: &str) -> Result<(), Box<dyn
 }
 
 
-
 /// Fetches the notes from an Amazon S3 bucket.
 ///
 /// # Parameters
@@ -645,8 +738,42 @@ pub async fn fetch_bucket_notes(bucket_name: &str) -> Result<Vec<(String, Option
                             Ok(get_object) => {
                                 let last_modified = get_object.last_modified().cloned().map(|dt| dt.to_string());
                                 let metadata = get_object.metadata().cloned();
-                                let content = get_object.body.collect().await.unwrap().to_vec();
-                                let content = String::from_utf8(content).unwrap_or_else(|_| String::new());
+                                let mut content = get_object.body.collect().await.unwrap().to_vec();
+                                // let content = String::from_utf8(content).unwrap_or_else(|_| String::new());
+
+                                // Retrieve the nonce from the metadata and convert it from a base64 string
+                                let nonce_str = match &metadata {
+                                    Some(map) => map.get("nonce").cloned().unwrap_or_else(|| String::from("")),
+                                    None => String::from(""),
+                                };
+                                let nonce_bytes = match general_purpose::STANDARD.decode(&nonce_str) {
+                                    Ok(bytes) => bytes,
+                                    Err(_) => {
+                                        eprintln!("Failed to decode nonce");
+                                        return Err("Failed to decode nonce".into());
+                                    }
+                                };
+                                if nonce_bytes.len() != 12 {
+                                    eprintln!("Nonce has wrong length");
+                                    return Err("Nonce has wrong length".into());
+                                }
+                                let nonce_array: [u8; 12] = nonce_bytes.try_into().unwrap();
+                                let nonce = Nonce::assume_unique_for_key(nonce_array);
+
+                                // Generate a random key
+                                let crypt_key = UnboundKey::new(&CHACHA20_POLY1305, &[0; 32]).unwrap();
+                                let crypt_key = LessSafeKey::new(crypt_key);
+
+                                // Decrypt the content
+                                let decrypted_content = match crypt_key.open_in_place(nonce, Aad::empty(), &mut content) {
+                                    Ok(decrypted_content) => decrypted_content,
+                                    Err(_) => {
+                                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to decrypt content")));
+                                    }
+                                };
+
+                                let content = String::from_utf8(decrypted_content.to_vec()).unwrap_or_else(|_| String::new());
+                                
                                 (last_modified, metadata, content)
                             },
                             Err(err) => {
@@ -721,3 +848,62 @@ pub async fn delete_bucket_notes(bucket_name: &str) -> Result<(), Box<dyn std::e
 
     Ok(())
 }
+
+
+// /// Decrypts the content of a note using the provided encrypted content and note ID.
+// ///
+// /// # Parameters
+// ///
+// /// * `encrypted_content` - The encrypted content of the note.
+// /// * `note_id` - The ID of the note.
+// ///
+// /// # Returns
+// ///
+// /// Returns a `Result` containing the decrypted content as a `String` if the decryption is successful.
+// /// If the decryption fails, an `Err` with a `String` describing the error is returned.
+// ///
+// /// # Errors
+// ///
+// /// This function will return an error if any of the following conditions are met:
+// /// * Failed to derive the nonce from the note ID.
+// /// * Failed to decode the encrypted content.
+// /// * Failed to decode the nonce.
+// /// * Failed to convert the nonce to an array.
+// /// * Failed to generate the encryption key.
+// /// * Failed to decrypt the content.
+// pub async fn decrypt_note_content(encrypted_content: &str, note_id: i64) -> Result<String, String> {
+//     // Get the nonce string from the note id
+//     let nonce_str = match local_operations::derive_nonce_from_id(note_id).await {
+//         Ok(nonce) => nonce,
+//         Err(_) => return Err("Failed to derive nonce from id".to_string()),
+//     };
+
+//     // Decode the encrypted content and the nonce
+//     let encrypted_content = match general_purpose::STANDARD.decode(encrypted_content) {
+//         Ok(content) => content,
+//         Err(_) => return Err("Failed to decode encrypted content".to_string()),
+//     };
+
+//     let nonce = match general_purpose::STANDARD.decode(&nonce_str) {
+//         Ok(nonce) => {
+//             let nonce_array: [u8; 12] = nonce.try_into().map_err(|_| "Failed to convert nonce to array".to_string())?;
+//             Nonce::assume_unique_for_key(nonce_array)
+//         },
+//         Err(_) => return Err("Failed to decode nonce".to_string()),
+//     };
+
+//     // Generate the key
+//     let crypt_key = UnboundKey::new(&CHACHA20_POLY1305, &[0; 32]).unwrap();
+//     let crypt_key = LessSafeKey::new(crypt_key);
+
+//     // Decrypt the content
+//     let mut in_out = encrypted_content.clone();
+//     match crypt_key.open_in_place(nonce, Aad::empty(), &mut in_out) {
+//         Ok(_) => {},
+//         Err(_) => return Err("Decryption failed".to_string()),
+//     };
+
+//     let decrypted_content = String::from_utf8_lossy(&in_out).into_owned();
+
+//     Ok(decrypted_content)
+// }

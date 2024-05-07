@@ -97,6 +97,7 @@ window.addEventListener("DOMContentLoaded", () => {
       case "cancel-button":
         noteId.value = "";
         noteTitle.value = "";
+        noteForm.dataset.noteId = "";
         quill.setContents("");
         selectedNoteId.textContent = "";
         break;

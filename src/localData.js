@@ -65,15 +65,21 @@ export async function showLocalNote(id) {
       // Update the form fields with the note data
       noteId.value = note.id;
       noteTitle.value = note.title;
-      let content =
-        typeof note.content === "string"
-          ? JSON.parse(note.content)
-          : note.content;
+      let content;
+      if (typeof note.content === "string") {
+        try {
+          content = JSON.parse(note.content);
+        } catch (error) {
+          console.error("Error parsing content as JSON:", error);
+          content = note.content;
+        }
+      } else {
+        content = note.content;
+      }
       quill.setContents(content);
       selectedNoteId.textContent = "Selected Note ID: " + note.id;
       noteForm.dataset.noteId = note.id;
     } else {
-      // Display an error message if the note is not found
       alert("Note not found.");
     }
   } catch (error) {
@@ -164,18 +170,18 @@ export async function loadLocalNotes() {
       const row = notesTableBody.insertRow();
       row.className = index % 2 === 0 ? "even-row" : "odd-row";
       row.innerHTML = `
-          <td>${note[2]}</td>
-          <td>${formatTimestamp(note[4])}</td>
-          <td>${formatTimestamp(note[5])}</td>
+          <td>${note.title}</td>
+          <td>${formatTimestamp(note.created_at)}</td>
+          <td>${formatTimestamp(note.updated_at)}</td>
           <td>
             <button class="btn btn-primary" onclick="showLocalNote(${
-              note[0]
+              note.id
             })">Show</button>
             <button class="btn btn-secondary" onclick="updateLocalNote(${
-              note[0]
+              note.id
             })">Update</button>
             <button class="btn btn-danger" onclick="deleteLocalNote(${
-              note[0]
+              note.id
             })">Delete</button>
           </td>
         `;
