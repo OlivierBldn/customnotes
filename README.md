@@ -898,6 +898,84 @@ Deletes all local notes by invoking the "delete_all_local_notes" function.
 - `Promise<void>`: A promise that resolves when all notes are deleted successfully.
 - Throws an `Error` if an error occurs while deleting the notes.
 
+## Functions
+
+### `exportNotesAsJSON`
+
+Exports the notes as JSON and downloads the file.
+
+#### Parameters
+
+- `notes`: The array of notes to export.
+
+#### Returns
+
+- `void`
+
+### `exportNotesAsMarkdown`
+
+Exports the notes as Markdown and downloads the file.
+
+#### Parameters
+
+- `notes`: The array of notes to export.
+
+#### Returns
+
+- `void`
+
+### `exportNotesAsPDF`
+
+Exports the notes as PDF and downloads the file.
+
+#### Parameters
+
+- `notes`: The array of notes to export.
+
+#### Returns
+
+- `void`
+
+### `exportNotes`
+
+Exports the notes in the specified format and downloads the file.
+
+#### Parameters
+
+- `format`: The format in which to export the notes. Supported formats are "pdf", "json", and "markdown".
+
+#### Returns
+
+- `void`
+
+### `importNotes`
+
+Imports notes into the application by creating local notes from the provided data.
+
+#### Parameters
+
+- `notes`: The array of notes to import.
+
+#### Returns
+
+- `Promise<void>`: A promise that resolves when all notes are imported successfully.
+
+#### Throws
+
+- `Error`: If an error occurs while importing the notes.
+
+### `handleFile`
+
+Handles the selected file and imports notes into the application.
+
+#### Parameters
+
+- `event`: The file input change event.
+
+#### Returns
+
+- `void`
+
 ---
 
 # `bucketData.js` Documentation

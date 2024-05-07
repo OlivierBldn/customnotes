@@ -257,56 +257,22 @@ export async function deleteAllLocalNotes() {
 }
 
 
-// export async function exportNotes() {
-//   const notes = JSON.parse(
-//     await invoke("execute_command", { command: "get_local_notes", args: "" })
-//   );
-
-//   // Create a new Quill instance with a temporary container
-//   const quille = new Quill(document.createElement('div'));
-
-//   notes.forEach(note => {
-//     // Parse the content as JSON to get the Delta
-//     const delta = JSON.parse(note.content);
-
-//     // Set the Quill contents to the Delta
-//     quille.setContents(delta);
-
-//     // Get the plain text from the Quill editor
-//     note.content = quille.getText();
-//   });
-
-//   console.log(notes);
-//   // Continue with your existing code to export the notes...
-// }
-
-
-// async function exportNotesAsJSON(notes) {
-//   // Create a new Quill instance
-//   const quill = new Quill('#editor');
-
-//   notes.forEach(note => {
-//     // Parse the content as JSON to get the Delta
-//     const delta = JSON.parse(note.content);
-
-//     // Set the Quill contents to the Delta
-//     quill.setContents(delta);
-
-//     // Get the plain text from the Quill editor
-//     note.content = quill.getText();
-//   });
-
-//   const dataStr = JSON.stringify(notes);
-//   await invoke("execute_command", { command: "export_as_json", args: dataStr });
-// }
-
+/**
+ * Exports the notes as JSON and downloads the file.
+ *
+ * @param {Array} notes - The array of notes to export.
+ * @returns {void}
+ */
 async function exportNotesAsJSON(notes) {
   // Create a new Quill instance
   const quill = new Quill('#editor');
 
   notes.forEach(note => {
-    // Parse the content as JSON to get the Delta
-    const delta = JSON.parse(note.content);
+    // Decrypt the content using the encryption algorithm
+    const decryptedContent = decrypt(note.content);
+
+    // Parse the decrypted content as JSON to get the Delta
+    const delta = JSON.parse(decryptedContent);
 
     // Set the Quill contents to the Delta
     quill.setContents(delta);
@@ -315,36 +281,32 @@ async function exportNotesAsJSON(notes) {
     note.content = quill.getText();
   });
 
+  // Convert the notes array to a formatted JSON string
   const dataStr = JSON.stringify(notes, null, 2);
+
+  // Create a Blob from the JSON string
   const dataBlob = new Blob([dataStr], {type: 'application/json'});
+
+  // Create a URL for the Blob
   const url = URL.createObjectURL(dataBlob);
 
+  // Create a link element to download the JSON file
   const link = document.createElement('a');
   link.href = url;
   link.download = 'notes.json';
   link.click();
 
+  // Revoke the URL to free up memory
   URL.revokeObjectURL(url);
-
-
 }
 
-// function exportNotesAsMarkdown(notes) {
-//   let markdownContent = "";
-//   notes.forEach(note => {
-//       markdownContent += `# ${note.title}\n\n${note.content}\n\n`;
-//   });
-//   const blob = new Blob([markdownContent], { type: "text/plain" });
-//   const url = URL.createObjectURL(blob);
-//   const link = document.createElement('a');
-//   link.href = url;
-//   link.download = "notes.md";
-//   document.body.appendChild(link);
-//   link.click();
-//   document.body.removeChild(link);
-// }
 
-// Export notes as Markdown
+/**
+ * Exports the notes as Markdown and downloads the file.
+ *
+ * @param {Array} notes - The array of notes to export.
+ * @returns {void}
+ */
 function exportNotesAsMarkdown(notes) {
   let markdownContent = "";
   notes.forEach(note => {
@@ -363,7 +325,12 @@ function exportNotesAsMarkdown(notes) {
 }
 
 
-// Export notes as PDF
+/**
+ * Exports the notes as PDF and downloads the file.
+ *
+ * @param {Array} notes - The array of notes to export.
+ * @returns {void}
+ */
 function exportNotesAsPDF(notes) {
   const doc = new jsPDF();
   let y = 10;
@@ -381,21 +348,114 @@ function exportNotesAsPDF(notes) {
   doc.save("notes.pdf");
 }
 
+
+/**
+ * Exports the notes in the specified format and downloads the file.
+ *
+ * @param {string} format - The format in which to export the notes. Supported formats are "pdf", "json", and "markdown".
+ * @returns {void}
+ */
 export async function exportNotes(format) {
   const response = await invoke("execute_command", { command: "get_local_notes", args: "" });
   const notes = JSON.parse(response);
 
   switch (format) {
-      case 'pdf':
-          exportNotesAsPDF(notes);
+    case 'pdf':
+      exportNotesAsPDF(notes);
+      break;
+    case 'json':
+      exportNotesAsJSON(notes);
+      break;
+    case 'markdown':
+      exportNotesAsMarkdown(notes);
+      break;
+    default:
+      console.error("Unsupported format:", format);
+  }
+}
+
+
+/**
+ * Imports notes into the application by creating local notes from the provided data.
+ *
+ * @async
+ * @param {Array} notes - The array of notes to import.
+ * @returns {Promise<void>} - A promise that resolves when all notes are imported successfully.
+ * @throws {Error} - If an error occurs while importing the notes.
+ */
+async function importNotes(notes) {
+  // Create a new Quill instance
+  const quill = new Quill(document.createElement('div'));
+
+  for (let note of notes) {
+    // Insert the HTML content into the Quill editor
+    quill.clipboard.dangerouslyPasteHTML(note.content);
+
+    // Get the Delta from the Quill editor
+    note.content = quill.getContents();
+
+    try {
+      await invoke("execute_command", {
+        command: "create_local_note",
+        args: {
+          note: {
+            title: note.title,
+            content: JSON.stringify(note.content),
+            created_at: Math.floor(Date.now() / 1000),
+            updated_at: Math.floor(Date.now() / 1000),
+          },
+        },
+      });
+
+      await loadLocalNotes();
+    } catch (error) {
+      console.error("Error creating note:", error);
+      alert("An error occurred while trying to create the note.");
+    }
+  }
+}
+
+
+/**
+ * Handles the selected file and imports notes into the application.
+ *
+ * @param {Event} event - The file input change event.
+ * @returns {void}
+ */
+export async function handleFile(event) {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = async function(event) {
+      let notes;
+      switch (file.name.split('.').pop()) {
+        case 'json':
+          notes = JSON.parse(event.target.result);
           break;
-      case 'json':
-          exportNotesAsJSON(notes);
+        case 'csv':
+          const csvData = Papa.parse(event.target.result, {header: true});
+          notes = csvData.data.map(row => ({
+            title: row.Title,
+            content: row.Content
+          }));
           break;
-      case 'markdown':
-          exportNotesAsMarkdown(notes);
+        case 'md':
+          const mdData = event.target.result;
+          notes = mdData.split('# ').map(section => {
+            const [title, ...content] = section.split('\n');
+            return {
+              title: title.trim(),
+              content: content.join('\n').trim()
+            };
+          });
           break;
-      default:
-          console.error("Unsupported format:", format);
+        default:
+          console.error("Unsupported file type:", file.type);
+          return;
+      }
+      notes = notes.filter(note => note.title.trim() !== "" && note.content.trim() !== "");
+      await importNotes(notes);
+    };
+    reader.readAsText(file);
   }
 }

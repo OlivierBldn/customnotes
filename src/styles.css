@@ -155,3 +155,21 @@ select {
   margin: 20px 0;
   padding: 10px;
 }
+
+#import-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+
+#import-container input {
+  margin-left: 20px;
+}
+
+#import-imput {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}

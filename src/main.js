@@ -8,6 +8,7 @@ import {
   loadLocalNotes,
   deleteAllLocalNotes,
   exportNotes,
+  handleFile,
 } from "./localData.js";
 import {
   createBucket,
@@ -30,6 +31,7 @@ export const selectedNoteId = document.querySelector("#selected-note-id");
 const searchQuery = document.querySelector("#search-query");
 const searchLocation = document.querySelector("#search-location");
 const bucketName = document.querySelector("#bucket-name");
+const importForm = document.querySelector("#import-form");
 
 // Initialize the Quill editor
 export const quill = new Quill("#editor", {
@@ -86,19 +88,17 @@ export function formatDateTime(timestampText) {
   return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
 }
 
-
 window.addEventListener("DOMContentLoaded", () => {
   const bucket = "olivier-rust-custom-notes";
 
   const cancelButton = document.querySelector("#cancel-button");
 
   document.body.addEventListener("click", (event) => {
-    event.preventDefault();
-
     const targetId = event.target.id;
 
     switch (targetId) {
       case "cancel-button":
+        event.preventDefault();
         noteId.value = "";
         noteTitle.value = "";
         noteForm.dataset.noteId = "";
@@ -109,36 +109,47 @@ window.addEventListener("DOMContentLoaded", () => {
         bucketName.value = "";
         break;
       case "create-local-note":
+        event.preventDefault();
         createLocalNote();
         break;
       case "show-local-note":
+        event.preventDefault();
         showLocalNote();
         break;
       case "update-local-note":
+        event.preventDefault();
         updateLocalNote();
         break;
       case "delete-local-note":
+        event.preventDefault();
         deleteLocalNote();
         break;
       case "create-bucket":
+        event.preventDefault();
         createBucket();
         break;
       case "delete-all-local-notes":
+        event.preventDefault();
         deleteAllLocalNotes();
         break;
       case "delete-bucket":
+        event.preventDefault();
         deleteBucket();
         break;
       case "upload-note-to-bucket":
+        event.preventDefault();
         uploadNoteToBucket();
         break;
       case "empty-bucket":
+        event.preventDefault();
         deleteBucketNotes();
         break;
       case "search-button":
+        event.preventDefault();
         searchInNote();
         break;
       case "export-notes":
+        event.preventDefault();
         exportNotes();
         break;
     }
@@ -255,6 +266,8 @@ window.addEventListener("DOMContentLoaded", () => {
   window.deleteBucketNote = deleteBucketNote;
 
   window.exportNotes = exportNotes;
+  window.handleFile = handleFile;
+
 
   loadLocalNotes();
   updateBucketList();

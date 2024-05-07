@@ -49,6 +49,13 @@
                     <button type="button" class="btn" onclick="exportNotes('pdf')">Export as PDF</button>
                 </div>
             </form>
+            <div id="import-container">
+                <h2>File Import</h2>
+                <form id="import-form" onsubmit="event.preventDefault();">
+                  <input type="file" id="note-file" class="import-input" accept=".json,.csv,.md" onchange="window.handleFile(event)">
+                  <button type="submit" class="btn">Import Notes</button>
+                </form>
+            </div>
             <section style="display: flex;">
             <table id="notes-table">
                 <thead>
@@ -78,6 +85,7 @@
     </section>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.0/dist/quill.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.5.3/jspdf.debug.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 </body>
 
 </html>
